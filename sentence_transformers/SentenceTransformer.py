@@ -3,7 +3,7 @@ import logging
 import os
 import shutil
 from collections import OrderedDict
-from typing import List, Dict, Tuple, Iterable, Type, Union
+from typing import List, Dict, Tuple, Iterable, Type, Union, Callable
 from zipfile import ZipFile
 import time
 from multiprocessing import Pool, cpu_count
@@ -314,7 +314,8 @@ class SentenceTransformer(nn.Sequential):
             max_grad_norm: float = 1,
             fp16: bool = False,
             fp16_opt_level: str = 'O1',
-            local_rank: int = -1
+            local_rank: int = -1,
+            callback: Callable[[float, int, int], None] = None,
             ):
         """
         Train the model with the given training objective
@@ -340,6 +341,9 @@ class SentenceTransformer(nn.Sequential):
         :param evaluator:
         :param epochs:
         :param steps_per_epoch: Train for x steps in each epoch. If set to None, the length of the dataset will be used
+        :param callback: Callback function that is invoked after each evaluation.
+                It must accept the following three parameters in this order:
+                `score`, `epoch`, `steps`
         """
         self.to(self._target_device)
 
@@ -446,12 +450,14 @@ class SentenceTransformer(nn.Sequential):
                 global_step += 1
 
                 if evaluation_steps > 0 and training_steps % evaluation_steps == 0:
-                    self._eval_during_training(evaluator, output_path, save_best_model, epoch, training_steps)
+                    self._eval_during_training(evaluator, output_path, save_best_model, epoch,
+                                               training_steps, callback)
                     for loss_model in loss_models:
                         loss_model.zero_grad()
                         loss_model.train()
 
-            self._eval_during_training(evaluator, output_path, save_best_model, epoch, -1)
+            self._eval_during_training(evaluator, output_path, save_best_model, epoch,
+                                       -1, callback)
 
     def evaluate(self, evaluator: SentenceEvaluator, output_path: str = None):
         """
@@ -466,10 +472,12 @@ class SentenceTransformer(nn.Sequential):
             os.makedirs(output_path, exist_ok=True)
         return evaluator(self, output_path)
 
-    def _eval_during_training(self, evaluator, output_path, save_best_model, epoch, steps):
+    def _eval_during_training(self, evaluator, output_path, save_best_model, epoch, steps, callback):
         """Runs evaluation during the training"""
         if evaluator is not None:
             score = evaluator(self, output_path=output_path, epoch=epoch, steps=steps)
+            if callback is not None:
+                callback(score, epoch, steps)
             if score > self.best_score and save_best_model:
                 self.save(output_path)
                 self.best_score = score
