@@ -312,7 +312,9 @@ class SentenceTransformer(nn.Sequential):
         :param evaluator:
         :param epochs:
         :param steps_per_epoch: Train for x steps in each epoch. If set to None, the length of the dataset will be used
-        :param callback TODO: add documentation
+        :param callback: Callback function that is invoked after each evaluation.
+                It must accept the following three parameters in this order:
+                `score`, `epoch`, `steps`
         """
         if output_path is not None:
             os.makedirs(output_path, exist_ok=True)
@@ -417,13 +419,13 @@ class SentenceTransformer(nn.Sequential):
                 global_step += 1
 
                 if evaluation_steps > 0 and training_steps % evaluation_steps == 0:
-                    self._eval_during_training(evaluator, output_path, save_best_model, epoch, 
+                    self._eval_during_training(evaluator, output_path, save_best_model, epoch,
                                                training_steps, callback)
                     for loss_model in loss_models:
                         loss_model.zero_grad()
                         loss_model.train()
 
-            self._eval_during_training(evaluator, output_path, save_best_model, epoch, 
+            self._eval_during_training(evaluator, output_path, save_best_model, epoch,
                                        -1, callback)
 
     def evaluate(self, evaluator: SentenceEvaluator, output_path: str = None):
